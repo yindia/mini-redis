@@ -1,0 +1,175 @@
+syntax = "proto3";
+
+package cloud.v1;
+
+import "google/protobuf/duration.proto";
+import "validate/validate.proto";
+
+// RedisService provides basic Redis-like functionality
+service RedisService {
+  // Set stores a key-value pair
+  rpc Set(SetRequest) returns (SetResponse) {}
+
+  // Get retrieves the value for a given key
+  rpc Get(GetRequest) returns (GetResponse) {}
+
+  // Del deletes one or more keys
+  rpc Del(DelRequest) returns (DelResponse) {}
+
+  // Incr increments the integer value of a key
+  rpc Incr(IncrRequest) returns (IncrResponse) {}
+
+  // Expire sets a timeout on a key
+  rpc Expire(ExpireRequest) returns (ExpireResponse) {}
+
+  // Ping checks if the server is responsive
+  rpc Ping(PingRequest) returns (PingResponse) {}
+
+  // Backup creates a backup of the current dataset
+  rpc Backup(BackupRequest) returns (BackupResponse) {}
+
+  // Restore rebuilds the dataset from a backup file
+  rpc Restore(RestoreRequest) returns (RestoreResponse) {}
+
+  // Join adds a new node to the cluster
+  rpc Join(JoinRequest) returns (JoinResponse) {}
+}
+
+// SetRequest represents the request to set a key-value pair
+message SetRequest {
+  string key = 1 [(validate.rules).string = {
+    min_len: 1,
+    max_len: 256,
+    pattern: "^[a-zA-Z0-9_-]+$"
+  }];
+  string value = 2 [(validate.rules).bytes = {
+    min_len: 1,
+    max_len: 524288
+  }]; // Max 512KB
+}
+
+// SetResponse represents the response from a Set operation
+message SetResponse {
+  bool success = 1 [(validate.rules).bool.const = true];
+}
+
+// GetRequest represents the request to retrieve a value by key
+message GetRequest {
+  string key = 1 [(validate.rules).string = {min_len: 1, max_len: 256}];
+}
+
+// GetResponse represents the response from a Get operation
+message GetResponse {
+  bytes value = 1 [(validate.rules).bytes = {
+    max_len: 524288
+  }]; // Max 512KB
+}
+
+// DelRequest represents the request to delete one or more keys
+message DelRequest {
+  repeated string keys = 1 [(validate.rules).repeated = {
+    min_items: 1,
+    max_items: 1000,
+    items: {
+      string: {
+        min_len: 1,
+        max_len: 256,
+        pattern: "^[a-zA-Z0-9_-]+$"
+      }
+    }
+  }];
+}
+
+// DelResponse represents the response from a Del operation
+message DelResponse {
+  int32 deleted_count = 1 [(validate.rules).int32.gte = 0];
+}
+
+// IncrRequest represents the request to increment a key's value
+message IncrRequest {
+  string key = 1 [(validate.rules).string = {min_len: 1, max_len: 256}];
+}
+
+// IncrResponse represents the response from an Incr operation
+message IncrResponse {
+  int64 Value = 1 [(validate.rules).int64.gte = 0];
+}
+
+// ExpireRequest represents the request to set an expiration on a key
+message ExpireRequest {
+  string key = 1 [(validate.rules).string = {
+    min_len: 1,
+    max_len: 256,
+    pattern: "^[a-zA-Z0-9_-]+$"
+  }];
+  google.protobuf.Duration ttl = 2 [(validate.rules).duration = {
+    required: true,
+    gt: {}
+  }];
+}
+
+// ExpireResponse represents the response from an Expire operation
+message ExpireResponse {
+  bool success = 1 [(validate.rules).bool.const = true];
+}
+
+// PingRequest represents the request for a Ping operation
+message PingRequest {
+  string message = 1 [(validate.rules).string = {
+    max_len: 256,
+    pattern: "^[\\p{L}\\p{N}\\s]*$"
+  }];  // Optional message to echo back, alphanumeric and spaces only
+}
+
+// PingResponse represents the response from a Ping operation
+message PingResponse {
+  string message = 1 [(validate.rules).string = {min_len: 1, max_len: 256}];  // "PONG" or the echoed message
+}
+
+// BackupRequest represents the request to create a backup
+message BackupRequest {
+  string filename = 1 [(validate.rules).string = {
+    pattern: "^[a-zA-Z0-9_-]+\\.rdb$",
+    max_len: 255
+  }];  // Name of the backup file to create
+}
+
+// BackupResponse represents the response from a Backup operation
+message BackupResponse {
+  bool success = 1;
+  string error_message = 2 [(validate.rules).string = {max_len: 1024}];  // Error message if backup failed
+}
+
+// RestoreRequest represents the request to restore from a backup
+message RestoreRequest {
+  string filename = 1 [(validate.rules).string = {
+    pattern: "^[a-zA-Z0-9_-]+\\.rdb$",
+    max_len: 255
+  }];  // Name of the backup file to restore from
+}
+
+// RestoreResponse represents the response from a Restore operation
+message RestoreResponse {
+  bool success = 1;
+  string error_message = 2 [(validate.rules).string = {max_len: 1024}];  // Error message if restore failed
+}
+
+// JoinRequest represents the request to join a new node to the cluster
+message JoinRequest {
+  string node_id = 1 [(validate.rules).string = {
+    min_len: 1,
+    max_len: 64,
+    pattern: "^[a-zA-Z0-9_-]+$"
+  }];
+  string remote_addr = 2 [(validate.rules).string = {
+    min_len: 1,
+    max_len: 255,
+    pattern: "^[a-zA-Z0-9.:\\-]+$"
+  }];
+}
+
+// JoinResponse represents the response from a Join operation
+message JoinResponse {
+  bool success = 1;
+  string error_message = 2 [(validate.rules).string = {max_len: 1024}];  // Error message if join failed
+}

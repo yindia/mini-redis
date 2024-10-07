@@ -1,0 +1,21 @@
+[project]
+name = "mini-redis"
+version = "0.1.0"
+description = "Add a short description here"
+authors = ["Yuvraj <evalsocket@gmail.com>"]
+channels = ["conda-forge"]
+platforms = ["osx-64"]
+
+[tasks]
+
+[dependencies]
+# Dev dependencies
+pre-commit = "~=3.3.0"
+
+git = "2.42.0.*"
+python = "=3.10"
+pip = "*"
+go = "=1.21"
+pyarrow = "14.0.2"
+pytest = ">=7"
+nodejs = ">=20.9.0,<20.11"

@@ -1,0 +1,15 @@
+linters:
+  disable-all: true
+  enable:
+    - deadcode
+    - gas
+    - goimports
+    - gosimple
+    - ineffassign
+    - misspell
+    - nakedret
+    - structcheck
+    - typecheck
+    - unparam
+    - unused
+    - varcheck
