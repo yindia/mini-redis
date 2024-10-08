@@ -217,7 +217,7 @@ func joinCluster(joinAddr, raftAddr, nodeID string) error {
 	slog.Info("Creating RedisServiceClient", "joinAddr", joinAddr)
 	client := cloudv1connect.NewRedisServiceClient(
 		http.DefaultClient,
-		"http://"+joinAddr,
+		joinAddr,
 		connect.WithInterceptors(interceptor),
 	)
 

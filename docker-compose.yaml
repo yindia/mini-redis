@@ -1,0 +1,61 @@
+version: '3.1'
+
+services:
+  master:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    networks:
+      - redis-cluster
+    command:
+      - mini-redis
+      - --dir=/data/master
+      - --id=master
+    ports:
+      - "12000:12000"
+      - "13000:13000"
+
+
+  node1:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    links:
+      - master
+    depends_on:
+      - master
+    networks:
+      - redis-cluster
+    command:
+      - mini-redis
+      - --dir=/data/node1
+      - --join=http://master:12000
+      - --id=node1
+    ports:
+      - "12001:12000"
+      - "13001:13000"
+
+  node2:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    links:
+      - master
+    depends_on:
+      - master
+    networks:
+      - redis-cluster
+    command:
+      - mini-redis
+      - --dir=/data/node2
+      - --join=http://master:12000
+      - --id=node2
+    ports:
+      - "12002:12000"
+      - "13002:13000"
+networks:
+  redis-cluster:
+    driver: bridge

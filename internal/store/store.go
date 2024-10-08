@@ -250,8 +250,10 @@ func (f *fsm) Snapshot() (raft.FSMSnapshot, error) {
 
 	// Clone the map.
 	o := make(map[string]string)
-	for k, v := range f.m {
-		o[k] = v
+	for _, v := range f.cache.Keys() {
+		if item, ok := f.cache.Get(v); ok {
+			o[v] = item.value
+		}
 	}
 	return &fsmSnapshot{store: o}, nil
 }
@@ -265,7 +267,13 @@ func (f *fsm) Restore(rc io.ReadCloser) error {
 
 	// Set the state from the snapshot, no lock required according to
 	// Hashicorp docs.
-	f.m = o
+	f.cache.Purge() // Clear the existing cache
+	for k, v := range o {
+		f.cache.Add(k, cacheItem{
+			value:      v,
+			expiration: time.Now().Add(f.defaultTTL),
+		})
+	}
 	return nil
 }
 
