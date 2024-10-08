@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"log"
 
 	"fmt"
 	"log/slog"
@@ -9,13 +10,12 @@ import (
 	"os"
 	"os/signal"
 	v1 "redis/internal/gen/cloud/v1"
+	cloudv1connect "redis/internal/gen/cloud/v1/cloudv1connect"
 	"redis/internal/route"
-	"redis/internal/store"
+	store "redis/internal/store"
 	"strings"
 	"syscall"
 	"time"
-
-	cloudv1connect "redis/internal/gen/cloud/v1/cloudv1connect"
 
 	"connectrpc.com/connect"
 	"connectrpc.com/grpchealth"
@@ -31,14 +31,14 @@ import (
 
 // Configuration variables
 var (
-	cfgFile  string
-	logLevel string
-	httpAddr string // Changed from 'address' to 'httpAddr' for clarity
-	raftDir  string
-	raftAddr string
-	joinAddr string
-	nodeID   string
-	inmem    bool
+	cfgFile   string
+	logLevel  string
+	httpAddr  string // Changed from 'address' to 'httpAddr' for clarity
+	raftDir   string
+	raftAddr  string
+	joinAddr  string
+	nodeID    string
+	bootstrap bool
 )
 
 const (
@@ -75,7 +75,6 @@ func init() {
 	rootCmd.Flags().StringVar(&raftAddr, "raft-addr", "127.0.0.1:12001", "Raft bind address")
 	rootCmd.Flags().StringVar(&joinAddr, "join", "", "Set join address, if any")
 	rootCmd.Flags().StringVar(&nodeID, "id", "", "Node ID. If not set, same as Raft bind address")
-	rootCmd.Flags().BoolVar(&inmem, "inmem", false, "Use in-memory storage for Raft")
 
 }
 
@@ -97,11 +96,7 @@ func runRootCommand() error {
 		return fmt.Errorf("failed to create Raft storage directory: %w", err)
 	}
 
-	if nodeID == "" {
-		nodeID = raftAddr
-	}
-
-	s := initializeStore()
+	store := initializeStore()
 
 	exitChan := make(chan os.Signal, 1)
 	signal.Notify(exitChan, syscall.SIGINT, syscall.SIGTERM)
@@ -109,7 +104,7 @@ func runRootCommand() error {
 	middleware := connectauth.NewMiddleware(authenticateRequest)
 
 	mux := http.NewServeMux()
-	if err := setupHandlers(mux, s, middleware); err != nil {
+	if err := setupHandlers(mux, store, middleware); err != nil {
 		return fmt.Errorf("failed to set up handlers: %w", err)
 	}
 
@@ -118,12 +113,6 @@ func runRootCommand() error {
 	srv := initializeHTTPServer(mux)
 
 	serverErrChan := startServer(srv)
-
-	if joinAddr != "" {
-		if err := joinCluster(joinAddr, raftAddr, nodeID); err != nil {
-			return fmt.Errorf("failed to join node at %s: %w", joinAddr, err)
-		}
-	}
 
 	return handleServerLifecycle(srv, exitChan, serverErrChan)
 }
@@ -149,14 +138,18 @@ func initLogger(level string) {
 }
 
 func initializeStore() *store.Store {
-	s := store.New(inmem)
-	s.RaftDir = raftDir
-	s.RaftBind = raftAddr
-	if err := s.Open(joinAddr == "", nodeID); err != nil {
-		slog.Error("Failed to open store", "error", err)
-		os.Exit(1)
+
+	redisServerStore := store.New(true)
+	redisServerStore.RaftDir = raftDir
+	redisServerStore.RaftBind = raftAddr
+	if err := redisServerStore.Open(joinAddr == "", nodeID); err != nil {
+		log.Fatalf("failed to open store: %s", err.Error())
 	}
-	return s
+
+	if joinAddr != "" {
+		joinCluster(joinAddr, raftAddr, nodeID)
+	}
+	return redisServerStore
 }
 
 func authenticateRequest(ctx context.Context, req *connectauth.Request) (any, error) {

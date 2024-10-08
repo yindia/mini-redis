@@ -2,12 +2,13 @@ package route
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
 
 	v1 "redis/internal/gen/cloud/v1"
-	"redis/internal/store"
+	Kvstore "redis/internal/store"
 
 	"connectrpc.com/connect"
 	"github.com/bufbuild/protovalidate-go"
@@ -31,12 +32,12 @@ type RedisServiceHandler interface {
 type RedisServer struct {
 	validator *protovalidate.Validator
 	logger    *log.Logger
-	store     *store.Store
+	store     *Kvstore.Store
 }
 
 // NewRedisServer creates and returns a new instance of RedisServer.
 // It initializes the validator and sets up the logger.
-func NewRedisServer(store *store.Store) RedisServiceHandler {
+func NewRedisServer(store *Kvstore.Store) RedisServiceHandler {
 	validator, err := protovalidate.New()
 	if err != nil {
 		log.Fatalf("Failed to initialize validator: %v", err)
@@ -60,11 +61,12 @@ func (s *RedisServer) Get(ctx context.Context, req *connect.Request[v1.GetReques
 
 	value, err := s.store.Get(req.Msg.Key)
 	if err != nil {
-		s.logger.Printf("Error getting key %s: %v", req.Msg.Key, err)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return connect.NewResponse(&v1.GetResponse{Value: []byte(value)}), nil
+	b, _ := json.Marshal(value)
+
+	return connect.NewResponse(&v1.GetResponse{Value: b}), nil
 }
 
 // Set stores a key-value pair.
@@ -76,7 +78,7 @@ func (s *RedisServer) Set(ctx context.Context, req *connect.Request[v1.SetReques
 	err := s.store.Set(req.Msg.Key, string(req.Msg.Value))
 	if err != nil {
 		s.logger.Printf("Error setting key %s: %v", req.Msg.Key, err)
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.(error))
 	}
 
 	return connect.NewResponse(&v1.SetResponse{Success: true}), nil
@@ -88,17 +90,14 @@ func (s *RedisServer) Del(ctx context.Context, req *connect.Request[v1.DelReques
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	deletedCount := 0
-	for _, key := range req.Msg.Keys {
-		err := s.store.Delete(key)
-		if err != nil {
-			s.logger.Printf("Error deleting key %s: %v", key, err)
-		} else {
-			deletedCount++
-		}
+	err := s.store.Delete(req.Msg.Keys)
+
+	if err != nil {
+		s.logger.Printf("Error setting key %s: %v", req.Msg.Keys, err)
+		return nil, connect.NewError(connect.CodeInternal, err.(error))
 	}
 
-	return connect.NewResponse(&v1.DelResponse{DeletedCount: int32(deletedCount)}), nil
+	return connect.NewResponse(&v1.DelResponse{DeletedCount: int32(1)}), nil
 }
 
 // Incr increments the integer value of a key.
@@ -111,23 +110,23 @@ func (s *RedisServer) Incr(ctx context.Context, req *connect.Request[v1.IncrRequ
 	// We need to implement it using Get and Set operations.
 	value, err := s.store.Get(req.Msg.Key)
 	if err != nil {
-		s.logger.Printf("Error getting key %s for increment: %v", req.Msg.Key, err)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-
-	intValue, err := strconv.Atoi(value)
+	// Convert the value to an integer and increment it
+	intValue, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("value is not an integer"))
+		s.logger.Printf("Error parsing value for key %s: %v", req.Msg.Key, err)
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-
 	intValue++
-	err = s.store.Set(req.Msg.Key, strconv.Itoa(intValue))
-	if err != nil {
-		s.logger.Printf("Error setting incremented value for key %s: %v", req.Msg.Key, err)
+
+	errr := s.store.Set(req.Msg.Key, strconv.FormatInt(intValue, 10))
+	if errr.(error) != nil {
+		s.logger.Printf("Error setting key %s: %v", req.Msg.Key, err)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return connect.NewResponse(&v1.IncrResponse{Value: int64(intValue)}), nil
+	return connect.NewResponse(&v1.IncrResponse{Value: intValue}), nil
 }
 
 // Expire sets a timeout on a key.
@@ -161,16 +160,10 @@ func (s *RedisServer) Join(ctx context.Context, req *connect.Request[v1.JoinRequ
 	if err := s.validator.Validate(req.Msg); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-
 	err := s.store.Join(req.Msg.NodeId, req.Msg.RemoteAddr)
 	if err != nil {
-		s.logger.Printf("Error joining node %s at %s: %v", req.Msg.NodeId, req.Msg.RemoteAddr, err)
-		return connect.NewResponse(&v1.JoinResponse{
-			Success:      false,
-			ErrorMessage: err.Error(),
-		}), nil
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-
 	return connect.NewResponse(&v1.JoinResponse{
 		Success: true,
 	}), nil

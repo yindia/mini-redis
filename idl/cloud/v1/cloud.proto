@@ -67,7 +67,7 @@ message GetResponse {
 
 // DelRequest represents the request to delete one or more keys
 message DelRequest {
-  repeated string keys = 1 [(validate.rules).repeated = {
+   string keys = 1 [(validate.rules).repeated = {
     min_items: 1,
     max_items: 1000,
     items: {

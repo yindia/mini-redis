@@ -1,10 +1,3 @@
-// Package store provides a simple distributed key-value store. The keys and
-// associated values are changed via distributed consensus, meaning that the
-// values are changed only when a majority of nodes in the cluster agree on
-// the new value.
-//
-// Distributed consensus is provided via the Raft algorithm, specifically the
-// Hashicorp implementation.
 package store
 
 import (
@@ -129,7 +122,7 @@ func (s *Store) Get(key string) (string, error) {
 // Set sets the value for the given key.
 func (s *Store) Set(key, value string) error {
 	if s.raft.State() != raft.Leader {
-		return fmt.Errorf("not leader, current leader is %s", s.raft.Leader())
+		return fmt.Errorf("not leader")
 	}
 
 	c := &command{
@@ -149,7 +142,7 @@ func (s *Store) Set(key, value string) error {
 // Delete deletes the given key.
 func (s *Store) Delete(key string) error {
 	if s.raft.State() != raft.Leader {
-		return fmt.Errorf("not leader, current leader is %s", s.raft.Leader())
+		return fmt.Errorf("not leader")
 	}
 
 	c := &command{
