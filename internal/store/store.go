@@ -11,9 +11,16 @@ import (
 	"sync"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru/v2"
+
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
 )
+
+type cacheItem struct {
+	value      string
+	expiration time.Time
+}
 
 const (
 	retainSnapshotCount = 2
@@ -28,24 +35,25 @@ type command struct {
 
 // Store is a simple key-value store, where all changes are made via Raft consensus.
 type Store struct {
-	RaftDir  string
-	RaftBind string
-	inmem    bool
-
-	mu sync.Mutex
-	m  map[string]string // The key-value store for the system.
-
-	raft *raft.Raft // The consensus mechanism
+	RaftDir    string
+	RaftBind   string
+	inmem      bool
+	defaultTTL time.Duration
+	mu         sync.Mutex
+	cache      *lru.Cache[string, cacheItem] // LRU cache with expiration
+	raft       *raft.Raft                    // The consensus mechanism
 
 	logger *log.Logger
 }
 
 // New returns a new Store.
 func New(inmem bool) *Store {
+	cache, _ := lru.New[string, cacheItem](1000) // Create an LRU cache with a capacity of 1000 items
 	return &Store{
-		m:      make(map[string]string),
-		inmem:  inmem,
-		logger: log.New(os.Stderr, "[store] ", log.LstdFlags),
+		cache:      cache,
+		defaultTTL: 24 * time.Hour,
+		inmem:      inmem,
+		logger:     log.New(os.Stderr, "[store] ", log.LstdFlags),
 	}
 }
 
@@ -116,7 +124,14 @@ func (s *Store) Open(enableSingle bool, localID string) error {
 func (s *Store) Get(key string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.m[key], nil
+
+	if item, ok := s.cache.Get(key); ok {
+		if time.Now().Before(item.expiration) {
+			return item.value, nil
+		}
+		s.cache.Remove(key) // Remove expired item
+	}
+	return "", fmt.Errorf("key not found")
 }
 
 // Set sets the value for the given key.
@@ -214,6 +229,20 @@ func (f *fsm) Apply(l *raft.Log) interface{} {
 	}
 }
 
+func (f *fsm) applySet(key, value string) interface{} {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.cache.Add(key, cacheItem{value: value, expiration: time.Now().Add(f.defaultTTL)})
+	return nil
+}
+
+func (f *fsm) applyDelete(key string) interface{} {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.cache.Remove(key)
+	return nil
+}
+
 // Snapshot returns a snapshot of the key-value store.
 func (f *fsm) Snapshot() (raft.FSMSnapshot, error) {
 	f.mu.Lock()
@@ -237,20 +266,6 @@ func (f *fsm) Restore(rc io.ReadCloser) error {
 	// Set the state from the snapshot, no lock required according to
 	// Hashicorp docs.
 	f.m = o
-	return nil
-}
-
-func (f *fsm) applySet(key, value string) interface{} {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.m[key] = value
-	return nil
-}
-
-func (f *fsm) applyDelete(key string) interface{} {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	delete(f.m, key)
 	return nil
 }
 

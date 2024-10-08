@@ -11,6 +11,7 @@ require (
 	connectrpc.com/otelconnect v0.7.1
 	github.com/bufbuild/protovalidate-go v0.7.2
 	github.com/envoyproxy/protoc-gen-validate v1.1.0
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hashicorp/raft v1.7.1
 	github.com/hashicorp/raft-boltdb/v2 v2.3.0
 	github.com/prometheus/client_golang v1.4.0
