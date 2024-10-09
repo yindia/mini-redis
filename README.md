@@ -21,5 +21,5 @@ Distributed Consensus: Hands-on experience with the Raft consensus algorithm.
 - [ ] Real-World Redis Features: Gain experience by mimicking real-world features like persistence and replication.
 
 ## Next Phase 
-- [ ] Rewrite the Raft Consensus Algorithm from scratch (No Wrapper) [CS244b: Distributed Systems](https://www.scs.stanford.edu/24sp-cs244b/sched/)
+- [ ] [Rewrite the Raft Consensus Algorithm from scratch](https://github.com/yindia/raft) (No Wrapper) [CS244b: Distributed Systems](https://www.scs.stanford.edu/24sp-cs244b/sched/)
 - [ ] 
